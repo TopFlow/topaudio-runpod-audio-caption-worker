@@ -784,6 +784,59 @@ def action_clear_clap_results(job_input):
     }
 
 
+
+def action_inspect_path(job_input):
+    rel_path = str(job_input.get("path", ".")).strip().lstrip("/")
+    target = (BASE_DIR / rel_path).resolve()
+
+    base = BASE_DIR.resolve()
+    if not str(target).startswith(str(base)):
+        return {
+            "ok": False,
+            "error": "Path outside BASE_DIR is not allowed",
+            "base_dir": str(BASE_DIR),
+            "requested": rel_path
+        }
+
+    if not target.exists():
+        return {
+            "ok": False,
+            "error": "Path does not exist",
+            "path": str(target)
+        }
+
+    files = []
+    dirs = []
+
+    if target.is_dir():
+        for x in sorted(target.iterdir()):
+            item = {
+                "name": x.name,
+                "path": str(x),
+                "is_dir": x.is_dir(),
+                "size": x.stat().st_size if x.is_file() else None
+            }
+            if x.is_dir():
+                dirs.append(item)
+            else:
+                files.append(item)
+
+    counts = {
+        "wav": len(list(target.rglob("*.wav"))) if target.is_dir() else 0,
+        "txt": len(list(target.rglob("*.txt"))) if target.is_dir() else 0,
+        "csv": len(list(target.rglob("*.csv"))) if target.is_dir() else 0,
+        "all_files": len([x for x in target.rglob("*") if x.is_file()]) if target.is_dir() else 1,
+    }
+
+    return {
+        "ok": True,
+        "path": str(target),
+        "is_dir": target.is_dir(),
+        "counts": counts,
+        "dirs": dirs[:50],
+        "files": files[:50],
+    }
+
 def handler(job):
     job_input = job.get("input", {})
     action = job_input.get("action", "health")
@@ -814,6 +867,9 @@ def handler(job):
 
     if action == "clear_clap_results":
         return action_clear_clap_results(job_input)
+
+    if action == "inspect_path":
+        return action_inspect_path(job_input)
 
     return {
         "ok": False,
