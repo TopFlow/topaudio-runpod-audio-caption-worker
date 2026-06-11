@@ -424,9 +424,10 @@ def load_clap_model():
         return
 
     clap_processor = ClapProcessor.from_pretrained(CLAP_MODEL_ID)
+    # Keep CLAP in float32. fp16 causes dtype mismatch in batch norm on some CUDA builds.
     clap_model = ClapModel.from_pretrained(
         CLAP_MODEL_ID,
-        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+        torch_dtype=torch.float32
     )
 
     if torch.cuda.is_available():
