@@ -277,6 +277,35 @@ def action_status(job_input):
         "results_jsonl": str(RESULTS_JSONL)
     }
 
+def action_read_results(job_input):
+    limit = int(job_input.get("limit", 5))
+
+    if not RESULTS_JSONL.exists():
+        return {
+            "ok": False,
+            "error": f"Results file not found: {RESULTS_JSONL}"
+        }
+
+    records = []
+    with RESULTS_JSONL.open("r", encoding="utf-8", errors="ignore") as f:
+        lines = f.readlines()
+
+    for line in lines[-limit:]:
+        try:
+            records.append(json.loads(line))
+        except Exception as e:
+            records.append({
+                "parse_error": str(e),
+                "raw_line": line[:500]
+            })
+
+    return {
+        "ok": True,
+        "results_jsonl": str(RESULTS_JSONL),
+        "total_lines": len(lines),
+        "records": records
+    }
+
 def handler(job):
     job_input = job.get("input", {})
     action = job_input.get("action", "health")
@@ -292,6 +321,9 @@ def handler(job):
 
     if action == "status":
         return action_status(job_input)
+
+    if action == "read_results":
+        return action_read_results(job_input)
 
     return {
         "ok": False,
