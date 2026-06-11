@@ -383,28 +383,70 @@ def action_clear_results(job_input):
 # -----------------------------
 
 GENRE_LABELS = [
-    "cinematic music", "corporate music", "pop music", "electronic music",
-    "ambient music", "orchestral music", "classical music", "rock music",
-    "acoustic music", "folk music", "hip hop music", "trap music",
-    "techno music", "house music", "edm music", "synthwave music",
-    "funk music", "jazz music", "lounge music", "piano music",
-    "trailer music", "epic music", "children music", "holiday music"
+    "corporate motivational background music",
+    "upbeat commercial pop background music",
+    "positive advertising background music",
+    "inspiring business presentation music",
+    "electronic technology background music",
+    "modern electronic background music",
+    "edm pop background music",
+    "synthwave retro electronic music",
+    "cinematic emotional background music",
+    "cinematic orchestral background music",
+    "epic orchestral trailer music",
+    "ambient cinematic background music",
+    "peaceful ambient background music",
+    "emotional piano background music",
+    "acoustic folk background music",
+    "happy acoustic guitar background music",
+    "funk groove background music",
+    "rock energetic background music",
+    "hip hop urban background music",
+    "luxury lounge background music"
 ]
 
 MOOD_LABELS = [
-    "happy", "uplifting", "inspiring", "motivational", "positive",
-    "optimistic", "playful", "fun", "bright", "warm", "calm",
-    "peaceful", "dreamy", "emotional", "romantic", "sad",
-    "dramatic", "dark", "tense", "mysterious", "deep", "energetic",
-    "powerful", "epic", "relaxed", "meditative", "melancholic"
+    "happy and positive",
+    "uplifting and inspiring",
+    "motivational and confident",
+    "optimistic and bright",
+    "playful and fun",
+    "warm and friendly",
+    "calm and peaceful",
+    "dreamy and atmospheric",
+    "emotional and touching",
+    "romantic and tender",
+    "sad and melancholic",
+    "dramatic and cinematic",
+    "dark and tense",
+    "mysterious and deep",
+    "energetic and powerful",
+    "epic and heroic",
+    "relaxed and meditative",
+    "modern and stylish"
 ]
 
 INSTRUMENT_LABELS = [
-    "piano", "electric guitar", "acoustic guitar", "ukulele", "strings",
-    "orchestra", "synthesizer", "synth pads", "bass guitar", "sub bass",
-    "drums", "electronic drums", "percussion", "claps", "bells",
-    "glockenspiel", "choir", "brass", "woodwinds", "violin",
-    "cello", "pluck synth", "whistle", "vocal chops"
+    "piano",
+    "soft piano",
+    "acoustic guitar",
+    "electric guitar",
+    "strings",
+    "full orchestra",
+    "cinematic drums",
+    "electronic drums",
+    "synthesizer",
+    "synth pads",
+    "pluck synth",
+    "bass",
+    "sub bass",
+    "percussion",
+    "claps",
+    "bells",
+    "brass",
+    "choir",
+    "violin",
+    "cello"
 ]
 
 USE_CASE_LABELS = [
