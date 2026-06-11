@@ -515,15 +515,104 @@ def clap_rank(audio_path, labels, top_k=5):
 
 
 def create_training_caption(genre_top, mood_top, instr_top, use_top, row):
-    genre = genre_top[0]["label"] if genre_top else "instrumental music"
-    moods = [x["label"] for x in mood_top[:3]]
-    instruments = [x["label"] for x in instr_top[:5]]
-    uses = [x["label"] for x in use_top[:3]]
+    # Use CLAP as a ranking signal, but keep captions conservative and non-contradictory.
+
+    genre = genre_top[0]["label"] if genre_top else "instrumental background music"
+
+    # Normalize overly broad genre labels for training captions.
+    genre_map = {
+        "positive advertising background music": "commercial background music",
+        "upbeat commercial pop background music": "upbeat commercial pop background music",
+        "corporate motivational background music": "corporate motivational background music",
+        "inspiring business presentation music": "corporate inspirational background music",
+        "modern electronic background music": "modern electronic background music",
+        "edm pop background music": "electronic pop background music",
+        "cinematic emotional background music": "cinematic emotional background music",
+        "epic orchestral trailer music": "epic cinematic orchestral music",
+        "ambient cinematic background music": "ambient cinematic background music",
+        "emotional piano background music": "emotional piano background music",
+        "acoustic folk background music": "acoustic folk background music",
+        "rock energetic background music": "energetic rock background music",
+        "funk groove background music": "funk groove background music",
+    }
+    genre = genre_map.get(genre, genre)
+
+    raw_moods = [x["label"] for x in mood_top if x.get("score", 0) >= 0.08]
+
+    # Avoid contradictory mood sets.
+    positive = [
+        "happy and positive",
+        "uplifting and inspiring",
+        "motivational and confident",
+        "optimistic and bright",
+        "playful and fun",
+        "warm and friendly",
+        "energetic and powerful",
+        "epic and heroic",
+    ]
+    emotional_dark = [
+        "sad and melancholic",
+        "dramatic and cinematic",
+        "dark and tense",
+        "mysterious and deep",
+        "emotional and touching",
+        "romantic and tender",
+    ]
+    calm = [
+        "calm and peaceful",
+        "dreamy and atmospheric",
+        "relaxed and meditative",
+    ]
+
+    def first_group(moods):
+        pos_hits = [m for m in moods if m in positive]
+        dark_hits = [m for m in moods if m in emotional_dark]
+        calm_hits = [m for m in moods if m in calm]
+
+        groups = [
+            ("positive", pos_hits),
+            ("emotional_dark", dark_hits),
+            ("calm", calm_hits),
+        ]
+        groups = [g for g in groups if g[1]]
+
+        if not groups:
+            return moods[:2]
+
+        # choose group with highest first occurrence in original ranking
+        best = min(groups, key=lambda g: moods.index(g[1][0]))
+        return best[1][:2]
+
+    moods = first_group(raw_moods)
+    if not moods and mood_top:
+        moods = [mood_top[0]["label"]]
+
+    raw_instruments = [x["label"] for x in instr_top if x.get("score", 0) >= 0.05]
+
+    # Remove cinematic drums from non-cinematic/non-epic genres to reduce false positives.
+    if not any(w in genre for w in ["cinematic", "epic", "orchestral", "trailer"]):
+        raw_instruments = [i for i in raw_instruments if i != "cinematic drums"]
+
+    # Avoid soft piano + piano duplicates.
+    cleaned_instruments = []
+    for inst in raw_instruments:
+        if inst == "soft piano" and "piano" in cleaned_instruments:
+            continue
+        if inst == "piano" and "soft piano" in cleaned_instruments:
+            cleaned_instruments = [x for x in cleaned_instruments if x != "soft piano"]
+        if inst not in cleaned_instruments:
+            cleaned_instruments.append(inst)
+
+    instruments = cleaned_instruments[:4]
+
+    raw_uses = [x["label"] for x in use_top if x.get("score", 0) >= 0.08]
+    uses = raw_uses[:2]
 
     bpm = str(row.get("bpm", "")).strip()
     key = str(row.get("key", "")).strip()
 
     parts = [f"Instrumental {genre}"]
+
     if bpm:
         parts.append(f"around {bpm} BPM")
     if key:
@@ -536,7 +625,6 @@ def create_training_caption(genre_top, mood_top, instr_top, use_top, row):
         parts.append("suitable for " + ", ".join(uses))
 
     return ", ".join(parts) + "."
-
 
 def already_done_clap():
     done = set()
