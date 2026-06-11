@@ -155,7 +155,7 @@ def analyze_audio(audio_path):
 
     inputs = processor(
         text=text,
-        audios=[audio],
+        audio=[audio],
         sampling_rate=target_sr,
         return_tensors="pt",
         padding=True
@@ -445,7 +445,7 @@ def clap_rank(audio_path, labels, top_k=5):
 
     inputs = clap_processor(
         text=texts,
-        audios=[audio],
+        audio=[audio],
         sampling_rate=target_sr,
         return_tensors="pt",
         padding=True
