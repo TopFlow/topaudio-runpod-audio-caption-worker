@@ -1,0 +1,11 @@
+runpod==1.7.13
+torch
+torchaudio
+torchvision
+transformers
+accelerate
+pandas
+soundfile
+librosa
+tqdm
+huggingface_hub
