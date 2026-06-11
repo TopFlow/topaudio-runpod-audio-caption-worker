@@ -7,6 +7,7 @@ from pathlib import Path
 import runpod
 import pandas as pd
 import torch
+import librosa
 from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
 
 BASE_DIR = Path(os.getenv("TOPAUDIO_BASE_DIR", "/runpod-volume/topaudio_ai"))
@@ -21,11 +22,13 @@ model = None
 processor = None
 
 PROMPT = """
-You are a professional music supervisor and dataset labeling expert.
+You are a professional music supervisor and music dataset labeling expert.
 
-Analyze this instrumental music audio clip. Do not use any external metadata. Only use what you hear.
+Analyze the provided instrumental music audio clip. Use only what you hear in the audio.
 
-Return strict JSON with these fields:
+Return strict JSON only. Do not add explanations, markdown, or extra text.
+
+JSON schema:
 {
   "genre": "",
   "subgenre": "",
@@ -47,8 +50,10 @@ Rules:
 - Do not mention artist names.
 - Do not mention copyrighted references.
 - If unsure, use "unknown" or lower confidence.
-- training_caption should be one clean sentence for AI music model training.
+- training_caption must be one clean sentence for AI music model training.
+- Focus on genre, mood, instruments, arrangement, rhythm, and commercial production use.
 """
+
 
 def load_model():
     global model, processor
@@ -68,8 +73,12 @@ def load_model():
         trust_remote_code=True
     )
 
+    model.eval()
+
+
 def already_done():
     done = set()
+
     if RESULTS_JSONL.exists():
         with RESULTS_JSONL.open("r", encoding="utf-8", errors="ignore") as f:
             for line in f:
@@ -79,13 +88,16 @@ def already_done():
                         done.add(str(stem))
                 except Exception:
                     pass
+
     return done
+
 
 def download_file(url, dest):
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     urllib.request.urlretrieve(url, dest)
     return str(dest)
+
 
 def safe_extract_tar_gz(archive_path, dest_dir):
     dest_dir = Path(dest_dir).resolve()
@@ -100,14 +112,30 @@ def safe_extract_tar_gz(archive_path, dest_dir):
 
     return str(dest_dir)
 
+
 def analyze_audio(audio_path):
+    """
+    Correct Qwen2-Audio path:
+    - load local wav into waveform with librosa
+    - pass waveform array to processor via audios=[audio]
+    - decode only generated tokens, not prompt+answer
+    """
     load_model()
+
+    audio_path = str(audio_path)
+    target_sr = processor.feature_extractor.sampling_rate
+
+    audio, _ = librosa.load(
+        audio_path,
+        sr=target_sr,
+        mono=True
+    )
 
     conversation = [
         {
             "role": "user",
             "content": [
-                {"type": "audio", "audio_url": str(audio_path)},
+                {"type": "audio", "audio_url": "local_audio"},
                 {"type": "text", "text": PROMPT},
             ],
         }
@@ -121,7 +149,8 @@ def analyze_audio(audio_path):
 
     inputs = processor(
         text=text,
-        audios=[str(audio_path)],
+        audios=[audio],
+        sampling_rate=target_sr,
         return_tensors="pt",
         padding=True
     )
@@ -139,13 +168,18 @@ def analyze_audio(audio_path):
             do_sample=False
         )
 
+    # Decode only the new assistant output, not the prompt.
+    prompt_len = inputs["input_ids"].size(1)
+    generated_ids = generated_ids[:, prompt_len:]
+
     output = processor.batch_decode(
         generated_ids,
         skip_special_tokens=True,
         clean_up_tokenization_spaces=False
-    )[0]
+    )[0].strip()
 
     return output
+
 
 def action_health(job_input):
     return {
@@ -155,8 +189,10 @@ def action_health(job_input):
         "catalog_exists": CATALOG_CSV.exists(),
         "results_jsonl": str(RESULTS_JSONL),
         "cuda_available": torch.cuda.is_available(),
-        "torch_version": torch.__version__
+        "torch_version": torch.__version__,
+        "model_id": MODEL_ID
     }
+
 
 def action_download_data(job_input):
     BASE_DIR.mkdir(parents=True, exist_ok=True)
@@ -186,6 +222,7 @@ def action_download_data(job_input):
         "catalog_exists": CATALOG_CSV.exists()
     }
 
+
 def action_caption_batch(job_input):
     load_model()
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -194,7 +231,10 @@ def action_caption_batch(job_input):
     only_stems = job_input.get("stems", None)
 
     if not CATALOG_CSV.exists():
-        return {"ok": False, "error": f"Catalog not found: {CATALOG_CSV}"}
+        return {
+            "ok": False,
+            "error": f"Catalog not found: {CATALOG_CSV}"
+        }
 
     df = pd.read_csv(CATALOG_CSV)
     done = already_done()
@@ -216,7 +256,10 @@ def action_caption_batch(job_input):
             audio_path = SNIPPETS_DIR / f"{stem}_middle30.wav"
 
             if not audio_path.exists():
-                errors.append({"stem": stem, "error": f"missing audio {audio_path}"})
+                errors.append({
+                    "stem": stem,
+                    "error": f"missing audio {audio_path}"
+                })
                 continue
 
             try:
@@ -240,7 +283,10 @@ def action_caption_batch(job_input):
                     "qwen2_raw": "",
                     "error": str(e)
                 }
-                errors.append({"stem": stem, "error": str(e)})
+                errors.append({
+                    "stem": stem,
+                    "error": str(e)
+                })
 
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
             f.flush()
@@ -258,11 +304,13 @@ def action_caption_batch(job_input):
         "results_jsonl": str(RESULTS_JSONL)
     }
 
+
 def action_status(job_input):
     done = already_done()
-    snippets_count = len(list(SNIPPETS_DIR.glob("*.wav"))) if SNIPPETS_DIR.exists() else 0
-    catalog_rows = 0
 
+    snippets_count = len(list(SNIPPETS_DIR.glob("*.wav"))) if SNIPPETS_DIR.exists() else 0
+
+    catalog_rows = 0
     if CATALOG_CSV.exists():
         try:
             catalog_rows = len(pd.read_csv(CATALOG_CSV))
@@ -271,11 +319,13 @@ def action_status(job_input):
 
     return {
         "ok": True,
+        "base_dir": str(BASE_DIR),
         "snippets_count": snippets_count,
         "catalog_rows": catalog_rows,
         "captions_done": len(done),
         "results_jsonl": str(RESULTS_JSONL)
     }
+
 
 def action_read_results(job_input):
     limit = int(job_input.get("limit", 5))
@@ -287,6 +337,7 @@ def action_read_results(job_input):
         }
 
     records = []
+
     with RESULTS_JSONL.open("r", encoding="utf-8", errors="ignore") as f:
         lines = f.readlines()
 
@@ -305,6 +356,20 @@ def action_read_results(job_input):
         "total_lines": len(lines),
         "records": records
     }
+
+
+def action_clear_results(job_input):
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    if RESULTS_JSONL.exists():
+        RESULTS_JSONL.unlink()
+
+    return {
+        "ok": True,
+        "message": "Results cleared",
+        "results_jsonl": str(RESULTS_JSONL)
+    }
+
 
 def handler(job):
     job_input = job.get("input", {})
@@ -325,9 +390,13 @@ def handler(job):
     if action == "read_results":
         return action_read_results(job_input)
 
+    if action == "clear_results":
+        return action_clear_results(job_input)
+
     return {
         "ok": False,
         "error": f"Unknown action: {action}"
     }
+
 
 runpod.serverless.start({"handler": handler})
